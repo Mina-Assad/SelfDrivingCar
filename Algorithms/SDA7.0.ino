@@ -6,7 +6,7 @@ LFSensor_0(IR1)   A0 -> 2(INT0)
 LFSensor_4(IR5)   A4 -> 3(INT1)
 */
 #include <Servo.h>
-#define powerIndex 1.6
+#define powerIndex 1
 #define speedPinR 5   // RIGHT PWM pin connect MODEL-X ENA
 #define RightDirectPin1  12    //  Right Motor direction pin 1 to MODEL-X IN1 
 #define RightDirectPin2  11    // Right Motor direction pin 2 to MODEL-X IN2
@@ -51,7 +51,7 @@ int trigger = 0;
 int timerCNT = 0;
 int timer = 0;
 bool R = 0;
-int M [3] = {0, 0, 0}; // M[0] for the most recent turn, M[1] for the obstacle turn, M[2] for the lane turn.
+int memory[3] = {0, 0, 0}; // memory[0] for the most recent turn, memory[1] for the obstacle turn, memory[2] for the lane turn.
 /*motor control*/
 void go_Advance(void)  //Forward
 {
@@ -66,7 +66,7 @@ void go_Left()  //Turn left
   digitalWrite(RightDirectPin2,LOW);
   digitalWrite(LeftDirectPin1,LOW);
   digitalWrite(LeftDirectPin2,HIGH);
-  M[0] = 1;
+  memory[0] = 1;
 }
 void go_Right()  //Turn right
 {
@@ -74,7 +74,7 @@ void go_Right()  //Turn right
   digitalWrite(RightDirectPin2,HIGH);
   digitalWrite(LeftDirectPin1,HIGH);
   digitalWrite(LeftDirectPin2,LOW);
-  M[0] = 2;
+  memory[0] = 2;
 }
 void go_Back()  //Reverse
 {
@@ -212,73 +212,75 @@ int obstacle_status =B100000;
     }
   head.write(90); //Finish looking around (look forward again)
   //delay(300);
-  String obstacle_str= String(obstacle_status,BIN);
-  obstacle_str= obstacle_str.substring(1,6);
+  char obstacle_str[6];   // 5 characters + null terminator
+
+  for (int i = 0; i < 5; i++) {
+      obstacle_str[i] = ((obstacle_status >> (4 - i)) & 1) ? '1' : '0';
+  }
+  obstacle_str[5] = '\0';
+
   Serial.println(obstacle_str);
   
   
-  if(obstacle_str == "00000" || obstacle_str == "10000" || obstacle_str == "00001" || obstacle_str == "10001" || obstacle_str == "11011"){
-    return 0; 
+  if (strcmp(obstacle_str, "00000") == 0 ||
+      strcmp(obstacle_str, "10000") == 0 ||
+      strcmp(obstacle_str, "00001") == 0 ||
+      strcmp(obstacle_str, "10001") == 0 ||
+      strcmp(obstacle_str, "11011") == 0) {
+      
+      return 0;
   }
-  else if(obstacle_str == "01000" || obstacle_str == "11000" || obstacle_str == "11100" || obstacle_str == "01100" || obstacle_str == "10100"){
-    if(M[2] == 0){
-      if(obstacle_str[2] == "0"){
-        return 4;
+
+  else if (strcmp(obstacle_str, "01000") == 0 ||
+          strcmp(obstacle_str, "11000") == 0 ||
+          strcmp(obstacle_str, "11100") == 0 ||
+          strcmp(obstacle_str, "01100") == 0 ||
+          strcmp(obstacle_str, "10100") == 0) {
+
+      if (memory[2] == 0) {
+          if (obstacle_str[2] == '0') return 4;
+          else return 5;
       }
-      else{
-        return 5;
+      else if (memory[2] == 1) {
+          return 5;
       }
-    }
-    else if(M[2] == 1){
+      else if (memory[2] == 2) {
+          if (obstacle_str[2] == '0') return 0;
+          else return 4;
+      }
       return 5;
-    }
-    else if(M[2] == 2){
-      if(obstacle_str[2] == "0"){
-        return 0;
-      }
-      else{
-        return 4;
-      }
-    }
-    return 5; 
   }
-  else if(obstacle_str == "00100" || obstacle_str == "01110" ){
-    if(M[2] = 0){
-      if(M[0] == 1){
-        return 5;
+
+  else if (strcmp(obstacle_str, "00100") == 0 ||
+          strcmp(obstacle_str, "01110") == 0) {
+
+      if (memory[2] == 0) {       // FIXED: use == instead of = !
+          if (memory[0] == 1) return 5;
+          else return 1;
       }
-      else{
-        return 1;
-      }
-    }
-    if(M[2] == 1){
-      return 5;
-    }
-    else{
-      return 1;
-    }
+      if (memory[2] == 1) return 5;
+      else return 1;
   }
-  else if(obstacle_str == "00010" || obstacle_str == "00011" || obstacle_str == "00111" || obstacle_str == "00110" || obstacle_str == "00101"){
-    if(M[2] == 0){
-      if(obstacle_str[2] == "0"){
-        return 2;
+
+  else if (strcmp(obstacle_str, "00010") == 0 ||
+          strcmp(obstacle_str, "00011") == 0 ||
+          strcmp(obstacle_str, "00111") == 0 ||
+          strcmp(obstacle_str, "00110") == 0 ||
+          strcmp(obstacle_str, "00101") == 0) {
+
+      if (memory[2] == 0) {
+          if (obstacle_str[2] == '0') return 2;
+          else return 1;
       }
-      else{
-        return 1;
+      else if (memory[2] == 1) {
+          if (obstacle_str[2] == '0') return 0;
+          else return 2;
       }
-    }
-    else if(M[2] == 1){
-      if(obstacle_str[2] == "0"){
-        return 0;
+      else {
+          return 1;
       }
-      else{
-        return 2;
-      }
-    }
-    else {
-      return 1;
-    }
   }
+
   return 6;
 }
 
@@ -360,7 +362,7 @@ void selfDriving(int& x){ //Main Algorithm
       surveilling(watchsurrounding());
       return;
     case 3:
-    if(M[0] == 0){
+    if(memory[0] == 0){
       if(R){
         Move('s', FAST_SPEED, 100);
         alarm();
@@ -388,7 +390,7 @@ void selfDriving(int& x){ //Main Algorithm
         return;
       }
     }
-      if(M[0] == 1){
+      if(memory[0] == 1){
         Move('s', FAST_SPEED, 100);
         alarm();
         Serial.println("go Right!!!");
@@ -483,10 +485,10 @@ void Handler(){
     FLG = 3;
   }
   if(timer > 2000 && FLG == 3){
-    if(M[0] == 1){
+    if(memory[0] == 1){
       FLG = 2;
     }
-    else if(M[0] == 2){
+    else if(memory[0] == 2){
       FLG = 3;
     }
     else{
